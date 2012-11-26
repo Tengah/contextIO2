@@ -27,17 +27,25 @@ class ContextIO(object):
             self.handle_request_error(response, body)
 
     def request(self, url, method, params, headers):
-        if params:
+        body = ''
+        if method == 'GET' and params:
             url += '?' + urlencode(params)
-
+        elif method == 'POST' and params:
+            body = urlencode(params)
         print "{method} {url}".format(url=url, method=method)
-        return self.client.request(url, method, headers=headers)
+        return self.client.request(url, method, headers=headers, body=body)
 
-    def get_accounts(self):
-        return [Account(self, obj) for obj in self.request_uri('accounts')]
+    def get_accounts(self, **params):
+        params = Resource.sanitize_params(params, ['email', 'status', 'status_ok', 'limit', 'offset'])
+        return [Account(self, obj) for obj in self.request_uri('accounts', params=params)]
 
     def post_account(self, email, first_name=None, last_name=None):
-        pass
+        params['email'] = email
+        if first_name is not None:
+            params['first_name'] = first_name
+        if last_name is not None:
+            params['last_name'] = last_name
+        return Account(self, self.request_uri('accounts', method="POST", params=params))
 
     def delete_account(self, account_id):
         pass
@@ -109,8 +117,26 @@ class Account(Resource):
 
         return [Message(self, obj) for obj in self.request_uri('messages', params=params)]
 
+    def get_message(self, message_id, **params):
+        params = Resource.sanitize_params(params, ['include_body', 'include_headers', 'include_flags', 'body_type'])
+        for key in ['include_headers', 'include_body']:
+            if key in params:
+                params[key] = '1' if params[key] is True else '0'
+        obj = self.request_uri('messages/%s' % message_id, params=params)
+        return Message(self, obj)
+
     def get_sources(self):
         return self.request_uri('sources')
+
+    def post_source(self, email, server, username, use_ssl=True, port='993', type='imap', **params):
+	params = Resource.sanitize_params(params, ['service_level', 'sync_period', 'password', 'provider_token', 'provider_token_secret', 'provider_consumer_key'])
+        params['email'] = email
+        params['server'] = server
+        params['username'] = username
+        params['port'] = port
+        params['type'] = type
+        params['use_ssl'] = '1' if use_ssl is True else '0' 
+        return self.request_uri('sources', method='POST', params=params)
 
     def post_sync(self):
         pass
