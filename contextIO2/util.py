@@ -39,7 +39,7 @@ def process_person_info(parent, person_info, addresses):
     from_addr = None
     from_contact = None
 
-    if addresses.has_key('to')
+    if addresses.has_key('to'):
         for info in addresses['to']:
             person_info[info.get('email')].setdefault('name', info.get('name'))
             to_addrs.append(info.get('email'))
