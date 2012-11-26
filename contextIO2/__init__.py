@@ -53,6 +53,21 @@ class ContextIO(object):
     def put_account(self, first_name=None, last_name=None):
         pass
 
+    def get_connect_tokens(self):
+        return [ConnectToken(self, obj) for obj in self.request_uri('connect_tokens')]
+
+    def get_connect_token(self, token):
+        obj = self.request_uri('connect_tokens/%s' % token)
+        return ConnectToken(self, obj)
+
+    def post_connect_token(self, callback_url, **params):
+        params = Resource.sanitize_params(params, ['service_level', 'email', 'first_name', 'last_name', 'source_callback_url', 'source_sync_flags', 'source_raw_file_list'])
+        params['callback_url'] = callback_url
+        resp = self.request_uri('connect_tokens', method='POST', params=params)
+        token = resp['token']
+        redirect_url = resp['browser_redirect_url']
+        return (token, redirect_url)
+
     def handle_request_error(self, response, body):
         messages = []
         try:
@@ -129,7 +144,7 @@ class Account(Resource):
         return self.request_uri('sources')
 
     def post_source(self, email, server, username, use_ssl=True, port='993', type='imap', **params):
-	params = Resource.sanitize_params(params, ['service_level', 'sync_period', 'password', 'provider_token', 'provider_token_secret', 'provider_consumer_key'])
+        params = Resource.sanitize_params(params, ['service_level', 'sync_period', 'password', 'provider_token', 'provider_token_secret', 'provider_consumer_key'])
         params['email'] = email
         params['server'] = server
         params['username'] = username
@@ -281,3 +296,12 @@ class Message(Resource):
         if self.thread is None:
             self.thread = self.request_uri('thread')
         return self.thread
+
+
+class ConnectToken(Resource):
+    keys = ['token', 'email', 'created', 'used', 'callback_url', 'service_level', 'first_name', 'last_name', 'account']
+    def __init__(self, parent, defn):
+        super(ConnectToken, self).__init__(parent, 'connect_tokens/{token}', defn)
+        if defn['account']:
+            self.account = Account(self.parent, defn['account'])
+
