@@ -54,7 +54,7 @@ class ContextIO(object):
                     messages.append("error {0}".format(message['code']))
             raise Exception('HTTP {status}: {message}'.format(status=response['status'], message=', '.join(messages)))
 
-        except ValueError:
+        except (ValueError, KeyError):
             raise Exception('HTTP {status}: {body}'.format(status=response['status'], body=body))
 
 class Resource(object):
