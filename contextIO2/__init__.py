@@ -6,7 +6,7 @@ from oauth2 import Request, Consumer, Client, SignatureMethod_HMAC_SHA1 as sha1
 from util import as_bool, as_datetime, process_person_info, uncamelize
 
 class ContextIO(object):
-    url_base = "https://api-preview.context.io"
+    url_base = "https://api.context.io"
 
     def __init__(self, consumer_key, consumer_secret):
         self.consumer = Consumer(key=consumer_key, secret=consumer_secret)
