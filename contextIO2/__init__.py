@@ -1,6 +1,40 @@
-# TODO (tony): write module docstring
-# TODO (tony): write constructor/class docstrings to be useful
-# TODO (tony): rename private _methods and _properties
+"""Provides an object-oriented interface for the Context.IO API.
+
+To use it, you have to [sign up for an account](http://context.io).
+
+Once you have an account, you can create a new `ContextIO` object and interact
+with the API using the methods on that object as a starting point.
+
+import contextIO2 as c
+
+CONSUMER_KEY = 'YOUR_API_KEY'
+CONSUMER_SECRET = 'YOUR_API_SECRET'
+
+context_io = c.ContextIO(
+  consumer_key=CONSUMER_KEY, 
+  consumer_secret=CONSUMER_SECRET
+)
+
+The module has tons of docstrings! Do help() calls in an interpreter to see
+how to use the module.
+
+The main context_io object is the parent of all objects and handles 
+authentication. If you store things like account or message ids and want
+to be lazy about querying, you can instantiate things like account objects
+like this:
+
+account = Account(context_io, {'id': 'ACCOUNT_ID'})
+
+If you want to populate the other account properties from the api, just do a:
+
+account.get()
+
+If you want to instantiate a sub-resource of an Account, just pass the
+account object as the parent.
+
+message = Message(account, {'id': 'MESSAGE_ID'})
+"""
+
 
 import json
 import logging
@@ -35,7 +69,6 @@ class ContextIO(object):
     url_base = "https://api.context.io"
 
     def __init__(self, consumer_key, consumer_secret, debug=None):
-        # TODO (tony): enhance debug
         """Constructor that creates oauth2 consumer and client.
         
         Required Arguments:
@@ -43,7 +76,9 @@ class ContextIO(object):
             consumer_secret: string - you api secret
         
         Optional Arguments:
-            debug: 
+            debug: if used, set to either 'print' or 'log' - if print, debug
+                messages will be sent to stdout. If set to 'log' will send
+                to logging.debug()
         """
         self.consumer = Consumer(key=consumer_key, secret=consumer_secret)
         self.client = Client(self.consumer)
@@ -51,7 +86,22 @@ class ContextIO(object):
         self.version = '2.0'
         self.debug = debug
 
-    def request_uri(self, uri, method="GET", params={}, headers={}, body=''):
+    def debug_message(self, message):
+        """Prints or logs a debug message.
+        
+        Required Arguments:
+            message: string - the debug message.
+        
+        Returns:
+            None
+        """
+        if self.debug:
+            if self.debug == 'print':
+                print message
+            elif self.debug == 'log':
+                logging.debug(message)
+
+    def _request_uri(self, uri, method="GET", params={}, headers={}, body=''):
         """Assembles the request uri and calls the request method.
         
         Required Arguments:
@@ -69,12 +119,11 @@ class ContextIO(object):
                 method docstrings for more details.
         """
         url = '/'.join((self.url_base, self.version, uri))
-        response, body = self.request(url, method, params, headers, body)
+        response, body = self._request(url, method, params, headers, body)
         status = int(response['status'])
-        if self.debug:
-            print 'status: %s\nresponse: %s\nbody: %s\n' % (
+        self.debug_message('status: %s\nresponse: %s\nbody: %s\n' % (
                 status, response, body
-            )
+        ))
         if status >= 200 and status < 300:
             # look for a ValueError
             try:
@@ -85,9 +134,9 @@ class ContextIO(object):
             return body
 
         else:
-            self.handle_request_error(response, body)
+            self._handle_request_error(response, body)
 
-    def request(self, url, method, params, headers, body=''):
+    def _request(self, url, method, params, headers, body=''):
         """This method actually makes the request using the oauth client.
         
         Required Arguments:
@@ -108,11 +157,24 @@ class ContextIO(object):
             url += '?' + urlencode(params)
         elif method == 'POST' and params:
             body = urlencode(params)
-        if self.debug:
-            print '-=CONTEXTIO.REQUEST=-\nurl: %s\nmethod: %s\nparams: %s\nheaders: %s\nbody: %s\n' % (url, method, params, headers, body)
-        else:
-            print "{method} {url}".format(url=url, method=method)
+        self.debug_message('-=CONTEXTIO.REQUEST=-\nurl: %s\nmethod: %s\nparams: %s\nheaders: %s\nbody: %s\n' % (url, method, params, headers, body))
         return self.client.request(url, method, headers=headers, body=body)
+
+    def _handle_request_error(self, response, body):
+        """This method formats request errors and raises appropriate 
+            exceptions."""
+        messages = []
+        try:
+            body = json.loads(body)
+            for message in body['messages']:
+                if message['type'] == 'error':
+                    messages.append("error {0}".format(message['code']))
+            raise Exception(
+                'HTTP %s: %s' % (response['status'], ', '.join(messages))
+            )
+
+        except (ValueError, KeyError):
+            raise Exception('HTTP %s: %s' % (response['status'], body))
 
     def get_accounts(self, **params):
         """List of Accounts.
@@ -145,7 +207,7 @@ class ContextIO(object):
         all_args = ['email', 'status', 'status_ok', 'limit', 'offset']
         
         params = Resource.sanitize_params(params, all_args)
-        return [Account(self, obj) for obj in self.request_uri(
+        return [Account(self, obj) for obj in self._request_uri(
             'accounts', params=params
         )]
 
@@ -217,7 +279,7 @@ class ContextIO(object):
         
         params = Resource.sanitize_params(params, all_args, req_args)
 
-        return Account(self, self.request_uri(
+        return Account(self, self._request_uri(
             'accounts', method="POST", params=params
         ))
 
@@ -232,7 +294,7 @@ class ContextIO(object):
         Returns:
             A list of ConnectToken objects.
         """
-        return [ConnectToken(self, obj) for obj in self.request_uri(
+        return [ConnectToken(self, obj) for obj in self._request_uri(
             'connect_tokens'
         )]
 
@@ -292,7 +354,7 @@ class ContextIO(object):
         
         params = Resource.sanitize_params(params, all_args, req_args)
         
-        return self.request_uri('connect_tokens', method='POST', params=params)
+        return self._request_uri('connect_tokens', method='POST', params=params)
 
     def get_discovery(self, **params):
         """Attempts to discover IMAP settings for a given email address.
@@ -316,7 +378,7 @@ class ContextIO(object):
         
         params = Resource.sanitize_params(params, all_args, req_args)
 
-        return Discovery(self, self.request_uri('discovery', params=params))
+        return Discovery(self, self._request_uri('discovery', params=params))
 
     def get_oauth_providers(self):
         """List of oauth providers configured.
@@ -330,9 +392,8 @@ class ContextIO(object):
             A list of OauthProvider objects.
         """
         return [OauthProvider(self, obj) for obj in
-            self.request_uri('oauth_providers')
+            self._request_uri('oauth_providers')
         ]
-        
     
     def post_oauth_providers(self, **params):
         """Add a new OAuth provider.
@@ -353,27 +414,13 @@ class ContextIO(object):
         
         params = Resource.sanitize_params(params, all_args, req_args)
         
-        self.request_uri('oauth_providers', method='POST', params=params)
-
-    def handle_request_error(self, response, body):
-        """This method formats request errors and raises appropriate 
-            exceptions."""
-        messages = []
-        try:
-            body = json.loads(body)
-            for message in body['messages']:
-                if message['type'] == 'error':
-                    messages.append("error {0}".format(message['code']))
-            raise Exception(
-                'HTTP %s: %s' % (response['status'], ', '.join(messages))
-            )
-
-        except (ValueError, KeyError):
-            raise Exception('HTTP %s: %s' % (response['status'], body))
+        self._request_uri('oauth_providers', method='POST', params=params)
 
 
 class Resource(object):
     """Base class for resource objects."""
+    keys = []
+    
     def __init__(self, parent, base_uri, defn):
         """Constructor."""
         defn = uncamelize(defn)
@@ -387,11 +434,11 @@ class Resource(object):
         self.parent = parent
         self.base_uri = quote(base_uri.format(**defn))
 
-    def uri_for(self, *elems):
+    def _uri_for(self, *elems):
         """Joins API endpoint elements and returns a string."""
         return '/'.join([self.base_uri] + list(elems))
 
-    def request_uri(
+    def _request_uri(
         self, uri_elems, method="GET", params={}, headers={}, body=''):
         """Gathers up request elements and helps form the request object.
         
@@ -405,8 +452,8 @@ class Resource(object):
             headers: dict - any specific http headers
             body: string - request body, only used on a few PUT statements
         """
-        uri = self.uri_for(uri_elems)
-        return self.parent.request_uri(
+        uri = self._uri_for(uri_elems)
+        return self.parent._request_uri(
             uri, method=method, params=params, headers=headers, body=body
         )
         
@@ -483,7 +530,14 @@ class Account(Resource):
         'nb_messages', 'nb_files']
 
     def __init__(self, parent, defn):
-        """Constructor."""
+        """Constructor.
+        
+        Required Arguments:
+            parent: ContextIO object - parent is the ContextIO object to handle
+                authentication.
+            defn: a dictionary of parameters. The 'id' parameter is required to
+                make method calls.
+        """
         super(Account, self).__init__(parent, 'accounts/{id}', defn)
 
     def get(self):
@@ -499,7 +553,7 @@ class Account(Resource):
         Returns:
             True if self is updated, else will throw a request error
         """
-        self.__init__(self.parent, self.request_uri(''))
+        self.__init__(self.parent, self._request_uri(''))
         return True
         
     def delete(self):
@@ -515,7 +569,7 @@ class Account(Resource):
         Returns:
             Bool
         """
-        status = self.request_uri('', method='DELETE')
+        status = self._request_uri('', method='DELETE')
         return bool(status['success'])
         
     def post(self, **params):
@@ -542,7 +596,7 @@ class Account(Resource):
         if 'last_name' in params:
             self.last_name = params['last_name']
         
-        status = self.request_uri('', method='POST', params=params)
+        status = self._request_uri('', method='POST', params=params)
         return bool(status['success'])
 
     def get_connect_tokens(self):
@@ -556,7 +610,7 @@ class Account(Resource):
         Returns:
             A list of ConnectToken objects
         """
-        return [ConnectToken(self, obj) for obj in self.request_uri(
+        return [ConnectToken(self, obj) for obj in self._request_uri(
             'connect_tokens'
         )]
 
@@ -610,14 +664,14 @@ class Account(Resource):
             }
         """
         req_args = ['callback_url', ]
-        all_args = ['callback_url','email', 'first_name', 'last_name', 
+        all_args = ['callback_url', 'email', 'first_name', 'last_name', 
             'source_callback_url', 'source_sync_all_folders', 
             'source_sync_flags', 'source_raw_file_list'
         ]
         
         params = Resource.sanitize_params(params, all_args, req_args)
         
-        return self.request_uri('connect_tokens', method='POST', params=params)
+        return self._request_uri('connect_tokens', method='POST', params=params)
 
     def get_contacts(self, **params):
         """List contacts in an account.
@@ -645,7 +699,7 @@ class Account(Resource):
         
         params = Resource.sanitize_params(params, all_args)
         
-        return [Contact(self, obj) for obj in self.request_uri(
+        return [Contact(self, obj) for obj in self._request_uri(
             'contacts', params=params).get('matches'
         )]
 
@@ -660,7 +714,7 @@ class Account(Resource):
         Returns:
             A list of EmailAddress objects.
         """
-        return [EmailAddress(self, obj) for obj in self.request_uri(
+        return [EmailAddress(self, obj) for obj in self._request_uri(
             'email_addresses'
         )]
 
@@ -680,7 +734,7 @@ class Account(Resource):
         
         params = Resource.sanitize_params(params, all_args, req_args)
         
-        return EmailAddress(self, self.request_uri(
+        return EmailAddress(self, self._request_uri(
             'email_addresses', method='POST', params=params
         ))
 
@@ -752,7 +806,7 @@ class Account(Resource):
         
         params = Resource.sanitize_params(params, all_args)
         
-        return [File(self, obj) for obj in self.request_uri(
+        return [File(self, obj) for obj in self._request_uri(
             'files', params=params
         )]
 
@@ -843,12 +897,11 @@ class Account(Resource):
             params['from'] = params['sender']
             del params['sender']
         
-        return [Message(self, obj) for obj in self.request_uri(
+        return [Message(self, obj) for obj in self._request_uri(
             'messages', params=params
         )]
 
     def post_messages(self, **params):
-        # TODO (tony): This isn't working...
         """Add a mesage in a given folder.
         
         Documentation: http://context.io/docs/2.0/accounts/messages#post
@@ -873,7 +926,7 @@ class Account(Resource):
         
         params = Resource.sanitize_params(params, all_args, req_args)
         
-        return self.request_uri(
+        return self._request_uri(
             'messages', method='POST', params=params, headers=headers)
 
     def get_sources(self, **params):
@@ -897,7 +950,7 @@ class Account(Resource):
         all_args = ['status', 'status_ok']
         params = Resource.sanitize_params(params, all_args)
         
-        return [Source(self, obj) for obj in self.request_uri(
+        return [Source(self, obj) for obj in self._request_uri(
             'sources', params=params
         )]
 
@@ -966,7 +1019,7 @@ class Account(Resource):
         ]
         params = Resource.sanitize_params(params, all_args, req_args)
         
-        data = self.request_uri('sources', method='POST', params=params)
+        data = self._request_uri('sources', method='POST', params=params)
         status = bool(data['success'])
         
         if status:
@@ -994,7 +1047,7 @@ class Account(Resource):
             }
         }
         """
-        return self.request_uri('sync')
+        return self._request_uri('sync')
 
     def post_sync(self):
         """Trigger a sync of all sources on the account.
@@ -1014,7 +1067,7 @@ class Account(Resource):
                 u'success': BOOL
             }
         """
-        return self.request_uri('sync', method='POST')
+        return self._request_uri('sync', method='POST')
 
     def get_threads(self, **params):
         """List of threads on an account.
@@ -1090,7 +1143,7 @@ class Account(Resource):
             params['from'] = params['sender']
             del params['sender']
         
-        thread_urls = self.request_uri('threads', params=params)
+        thread_urls = self._request_uri('threads', params=params)
         objs = []
         
         # isolate just the gmail_thread_id so we can instantiate Thread objects
@@ -1113,7 +1166,7 @@ class Account(Resource):
         Returns:
             A list of Webhook objects.
         """
-        return [WebHook(self, obj) for obj in self.request_uri('webhooks')]
+        return [WebHook(self, obj) for obj in self._request_uri('webhooks')]
     
     def post_webhooks(self, **params):
         """Create a new WebHook on an account.
@@ -1188,7 +1241,7 @@ class Account(Resource):
         
         params = Resource.sanitize_params(params, all_args, req_args)
         
-        data = self.request_uri('webhooks', method='POST', params=params)
+        data = self._request_uri('webhooks', method='POST', params=params)
         status = bool(data['success'])
         
         if status:
@@ -1216,7 +1269,13 @@ class Contact(Resource):
         'count', 'email']
 
     def __init__(self, parent, defn):
-        """Constructor."""
+        """Constructor.
+        
+        Required Arguments:
+            parent: Account object - parent is an Account object.
+            defn: a dictionary of parameters. The 'email' parameter is 
+                required to make method calls.
+        """
         super(Contact, self).__init__(parent, 'contacts/{email}',  defn)
         
         # if emails == None, populate with email
@@ -1247,7 +1306,7 @@ class Contact(Resource):
             True if self is updated, else will throw a request error
         """
         # since the data returned doesn't have an email key, add it from emails
-        data = self.request_uri('')
+        data = self._request_uri('')
         if 'emails' in data:
             if data['emails']:
                 data['email'] = data['emails'][0]
@@ -1270,7 +1329,7 @@ class Contact(Resource):
         all_args = ['limit', 'offset']
         params = Resource.sanitize_params(params, all_args)
         
-        return [File(self.parent, obj) for obj in self.request_uri(
+        return [File(self.parent, obj) for obj in self._request_uri(
             'files', params=params
         )]
 
@@ -1290,7 +1349,7 @@ class Contact(Resource):
         all_args = ['limit', 'offset']
         params = Resource.sanitize_params(params, all_args)
         
-        return [Message(self.parent, obj) for obj in self.request_uri(
+        return [Message(self.parent, obj) for obj in self._request_uri(
             'messages', params=params
         )]
 
@@ -1309,7 +1368,7 @@ class Contact(Resource):
         all_args = ['limit', 'offset']
         params = Resource.sanitize_params(params, all_args)
         
-        thread_urls = self.request_uri('threads', params=params)
+        thread_urls = self._request_uri('threads', params=params)
         objs = []
         
         # isolate just the gmail_thread_id so we can instantiate Thread objects
@@ -1332,7 +1391,13 @@ class EmailAddress(Resource):
     keys = ['email', 'validated', 'primary']
     
     def __init__(self, parent, defn):
-        """Constructor."""
+        """Constructor.
+        
+        Required Arguments:
+            parent: Account object - parent is an Account object.
+            defn: a dictionary of parameters. The 'email' parameter is 
+                required to make method calls.
+        """
         # be sure that the email key exists in defn
         if 'email_address' in defn:
             defn['email'] = defn['email_address']
@@ -1355,7 +1420,7 @@ class EmailAddress(Resource):
         Returns:
             True if self is updated, else will throw a request error
         """
-        self.__init__(self.parent, self.request_uri(''))
+        self.__init__(self.parent, self._request_uri(''))
         return True
     
     def post(self, **params):
@@ -1380,7 +1445,7 @@ class EmailAddress(Resource):
         if 'primary' in params:
             self.primary = params['primary']
         
-        status = self.request_uri('', method='POST', params=params)
+        status = self._request_uri('', method='POST', params=params)
         return bool(status['success'])
     
     def delete(self):
@@ -1396,7 +1461,7 @@ class EmailAddress(Resource):
         Returns:
             Bool
         """
-        status = self.request_uri('', method='DELETE')
+        status = self._request_uri('', method='DELETE')
         return bool(status['success'])
 
 
@@ -1448,7 +1513,14 @@ class File(Resource):
         'gmail_thread_id', 'similarity', 'supports_diff']
 
     def __init__(self, parent, defn):
-        """Constructor."""
+        """Constructor.
+        
+        Required Arguments:
+            parent: Account object - parent is an Account object.
+            defn: a dictionary of parameters. The 'file_id' parameter is 
+                required to make method calls.
+        """
+        
         super(File, self).__init__(parent, 'files/{file_id}', defn)
 
     def get(self):
@@ -1464,39 +1536,8 @@ class File(Resource):
         Returns:
             True if self is updated, else will throw a request error
         """
-        self.__init__(self.parent, self.request_uri(''))
+        self.__init__(self.parent, self._request_uri(''))
         return True
-
-    def get_changes(self):
-        # TODO (tony): does this work (and write Returns section of docstring)?
-        """This method lists files that can be compared.
-        
-        Documentation: http://context.io/docs/2.0/accounts/files/changes#get
-        
-        Arguments:
-            None
-        
-        Returns:
-            
-        """
-        return self.request_uri('changes')
-
-    def compare(self, file_id):
-        # TODO (tony): does this work (and write Returns section of docstring)?
-        """Shows the revisions between two files.
-        
-        Documentation: http://context.io/docs/2.0/accounts/files/changes
-        
-        Required Arguments:
-            file_id: string or object - either the file_id of a file, or a 
-                File object.
-        
-        Returns:
-            
-        """
-        if isinstance(file_id, File):
-            file_id = file_id.file_id
-        return self.request_uri('changes/%s' % file_id)
 
     def get_content(self, download_link=False):
         """Download a file.
@@ -1517,7 +1558,7 @@ class File(Resource):
         else:
             headers = {}
 
-        return self.request_uri('content', headers=headers)
+        return self._request_uri('content', headers=headers)
 
     def get_related(self):
         """Get list of other files related to a given file.
@@ -1530,7 +1571,7 @@ class File(Resource):
         Returns:
             A list of File objects.
         """
-        return [File(self, obj) for obj in self.request_uri('related')]
+        return [File(self, obj) for obj in self._request_uri('related')]
 
     def get_revisions(self):
         """Get list of other revisions of a given file.
@@ -1543,7 +1584,7 @@ class File(Resource):
         Returns:
             A list of File objects.
         """
-        return [File(self, obj) for obj in self.request_uri('revisions')]
+        return [File(self, obj) for obj in self._request_uri('revisions')]
 
 
 class Message(Resource):
@@ -1587,7 +1628,14 @@ class Message(Resource):
     thread = None
 
     def __init__(self, parent, defn):
-        """Constructor."""
+        """Constructor.
+        
+        Required Arguments:
+            parent: Account object - parent is an Account object.
+            defn: a dictionary of parameters. The 'message_id' parameter is 
+                required to make method calls.
+        """
+        
         super(Message, self).__init__(parent, 'messages/{message_id}', defn)
 
         if 'files' in defn:
@@ -1630,7 +1678,7 @@ class Message(Resource):
             'body_type']
         params = Resource.sanitize_params(params, all_args)
         
-        self.__init__(self.parent, self.request_uri('', params=params))
+        self.__init__(self.parent, self._request_uri('', params=params))
         return True
         
     def post(self, **params):
@@ -1675,7 +1723,7 @@ class Message(Resource):
         all_args = ['dst_folder', 'dst_source', 'move', 'dst_label']
         params = Resource.sanitize_params(params, all_args, req_args)
 
-        status = self.request_uri('', method='POST', params=params)
+        status = self._request_uri('', method='POST', params=params)
 
         if return_bool:
             return bool(status['success'])
@@ -1692,7 +1740,7 @@ class Message(Resource):
         Returns:
             Bool
         """
-        status = self.request_uri('', method='DELETE')
+        status = self._request_uri('', method='DELETE')
         return bool(status['success'])
 
     def get_body(self, **params):
@@ -1726,7 +1774,7 @@ class Message(Resource):
         """
         all_args = ['type', ]
         params = Resource.sanitize_params(params, all_args)
-        self.body = self.request_uri('body', params=params)
+        self.body = self._request_uri('body', params=params)
         return self.body
     
     def get_flags(self):
@@ -1753,7 +1801,7 @@ class Message(Resource):
                   as "junk" mail,
             }
         """
-        self.flags = self.request_uri('flags')
+        self.flags = self._request_uri('flags')
         return self.flags
         
     
@@ -1784,7 +1832,7 @@ class Message(Resource):
         all_args = ['seen', 'answered', 'flagged', 'deleted', 'draft']
         params = Resource.sanitize_params(params, all_args)
         
-        data = self.request_uri('flags', method='POST', params=params)
+        data = self._request_uri('flags', method='POST', params=params)
         status = bool(data['success'])
         
         if status:
@@ -1815,8 +1863,7 @@ class Message(Resource):
               ...
             ]
         """
-        # TODO (tony): should this return folder objects?
-        self.folders = self.request_uri('folders')
+        self.folders = self._request_uri('folders')
         return self.folders
     
     def post_folders(self, **params):
@@ -1837,8 +1884,7 @@ class Message(Resource):
         """
         all_args = ['add', 'remove', 'add[]', 'remove[]']
         params = Resource.sanitize_params(params, all_args)
-        status = self.request_uri('folders', method='POST', params=params)
-        # TODO: update self.folders on success
+        status = self._request_uri('folders', method='POST', params=params)
         return bool(status['success'])
     
     def put_folders(self, body):
@@ -1861,7 +1907,7 @@ class Message(Resource):
         Returns:
             Bool
         """
-        status = self.request_uri('folders', method='PUT', body=body)
+        status = self._request_uri('folders', method='PUT', body=body)
         status = bool(status['success'])
         
         if status:
@@ -1890,7 +1936,7 @@ class Message(Resource):
         """
         all_args = ['raw', ]
         params = Resource.sanitize_params(params, all_args)
-        self.headers = self.request_uri('headers', params=params)
+        self.headers = self._request_uri('headers', params=params)
         return self.headers
     
     def get_source(self):
@@ -1904,7 +1950,7 @@ class Message(Resource):
         Returns:
             string - raw RFC-822 message
         """
-        self.source = self.request_uri('source')
+        self.source = self._request_uri('source')
         return self.source
     
     def get_thread(self, **params):
@@ -1943,7 +1989,7 @@ class Message(Resource):
         ]
         params = Resource.sanitize_params(params, all_args)
         
-        data = self.request_uri('thread', params=params)
+        data = self._request_uri('thread', params=params)
         
         # try to find the gmail_thread_id
         if data['messages']:
@@ -2001,7 +2047,14 @@ class Source(Resource):
     ]
 
     def __init__(self, parent, defn):
-        """Constructor."""
+        """Constructor.
+        
+        Required Arguments:
+            parent: Account object - parent is an Account object.
+            defn: a dictionary of parameters. The 'label' parameter is 
+                required to make method calls.
+        """
+        
         super(Source, self).__init__(parent, 'sources/{label}',  defn)
 
     def get(self):
@@ -2015,7 +2068,7 @@ class Source(Resource):
         Returns:
             True if self is updated, else will throw a request error
         """
-        self.__init__(self.parent, self.request_uri(''))
+        self.__init__(self.parent, self._request_uri(''))
         return True
     
     def delete(self):
@@ -2029,7 +2082,7 @@ class Source(Resource):
         Returns:
             Bool
         """
-        status = self.request_uri('', method='DELETE')
+        status = self._request_uri('', method='DELETE')
         return bool(status['success'])
     
     def post(self, **params):
@@ -2067,7 +2120,7 @@ class Source(Resource):
         ]
         params = Resource.sanitize_params(params, all_args)
         
-        status = self.request_uri('', method='POST', params=params)
+        status = self._request_uri('', method='POST', params=params)
         return bool(status['success'])
 
     def get_folders(self, **params):
@@ -2084,7 +2137,7 @@ class Source(Resource):
         all_args = ['include_extended_counts', ]
         params = Resource.sanitize_params(params, all_args)
         
-        return [Folder(self, obj) for obj in self.request_uri(
+        return [Folder(self, obj) for obj in self._request_uri(
             'folders', params=params
         )]
     
@@ -2108,7 +2161,7 @@ class Source(Resource):
                 }
             }
         """
-        return self.request_uri('sync')
+        return self._request_uri('sync')
     
     def post_sync(self):
         """Trigger a sync of a data source.
@@ -2129,7 +2182,7 @@ class Source(Resource):
                 'label': STRING, source label
             }
         """
-        return self.request_uri('sync', method='POST')
+        return self._request_uri('sync', method='POST')
 
 
 class ConnectToken(Resource):
@@ -2153,7 +2206,14 @@ class ConnectToken(Resource):
         'first_name', 'last_name', 'account']
 
     def __init__(self, parent, defn):
-        """Constructor."""
+        """Constructor.
+        
+        Required Arguments:
+            parent: ContextIO object - parent is an ContextIO object.
+            defn: a dictionary of parameters. The 'token' parameter is 
+                required to make method calls.
+        """
+        
         super(ConnectToken, self).__init__(
             parent, 'connect_tokens/{token}', defn
         )
@@ -2174,7 +2234,7 @@ class ConnectToken(Resource):
         Returns:
             True if self is updated, else will throw a request error
         """
-        self.__init__(self.parent, self.request_uri(''))
+        self.__init__(self.parent, self._request_uri(''))
         return True
     
     def delete(self):
@@ -2189,7 +2249,7 @@ class ConnectToken(Resource):
         Returns:
             Bool
         """
-        status = self.request_uri('', method='DELETE')
+        status = self._request_uri('', method='DELETE')
         return bool(status['success'])
 
 class Discovery(Resource):
@@ -2217,7 +2277,12 @@ class Discovery(Resource):
     keys = ['email', 'found', 'type', 'imap', 'documentation']
     
     def __init__(self, parent, defn):
-        """Constructor."""
+        """Constructor.
+        
+        Required Arguments:
+            parent: ContextIO object - parent is an ContextIO object.
+            defn: a dictionary of parameters.
+        """
         super(Discovery, self).__init__(parent, 'discovery', defn)
 
 
@@ -2235,7 +2300,13 @@ class Folder(Resource):
     keys = ['name', 'attributes', 'delim', 'nb_messages', 'nb_unseen_messages']
     
     def __init__(self, parent, defn):
-        """Constructor."""
+        """Constructor.
+        
+        Required Arguments:
+            parent: Source object - parent is an Source object.
+            defn: a dictionary of parameters. The 'name' parameter is 
+                required to make method calls.
+        """
         super(Folder, self).__init__(parent, 'folders/{name}', defn)
 
     def put(self, **params):
@@ -2255,7 +2326,7 @@ class Folder(Resource):
         """
         all_args = ['delim', ]
         params = Resource.sanitize_params(params, all_args)
-        status = self.request_uri('', method='PUT')
+        status = self._request_uri('', method='PUT')
         return bool(status['success'])
         
     def get_messages(self, **params):
@@ -2298,7 +2369,7 @@ class Folder(Resource):
         ]
         params = Resource.sanitize_params(params, all_args)
         
-        return [Message(self.parent.parent, obj) for obj in self.request_uri(
+        return [Message(self.parent.parent, obj) for obj in self._request_uri(
             'messages', params=params
         )]
 
@@ -2323,7 +2394,13 @@ class Thread(Resource):
     ]
     
     def __init__(self, parent, defn):
-        """Constructor."""
+        """Constructor.
+        
+        Required Arguments:
+            parent: Account object - parent is an Account object.
+            defn: a dictionary of parameters. The 'gmail_thread_id' parameter 
+                is required to make method calls.
+        """
         super(Thread, self).__init__(parent, 'threads/{gmail_thread_id}', defn)
         
         if 'messages' in defn:
@@ -2369,7 +2446,7 @@ class Thread(Resource):
             'include_headers', 'include_flags', 'body_type', 'limit', 'offset'
         ]
         params = Resource.sanitize_params(params, all_args)
-        self.__init__(self.parent, self.request_uri('', params=params))
+        self.__init__(self.parent, self._request_uri('', params=params))
         return True        
 
 
@@ -2435,7 +2512,13 @@ class WebHook(Resource):
     ]
     
     def __init__(self, parent, defn):
-        """Constructor."""
+        """Constructor.
+        
+        Required Arguments:
+            parent: Account object - parent is an Account object.
+            defn: a dictionary of parameters. The 'webhook_id' parameter 
+                is required to make method calls.
+        """
         super(WebHook, self).__init__(parent, 'webhooks/{webhook_id}', defn)
     
     def get(self):
@@ -2449,7 +2532,7 @@ class WebHook(Resource):
         Returns:
             True if self is updated, else will throw a request error
         """
-        self.__init__(self.parent, self.request_uri(''))
+        self.__init__(self.parent, self._request_uri(''))
         return True
     
     def delete(self):
@@ -2463,7 +2546,7 @@ class WebHook(Resource):
         Returns:
             Bool
         """
-        status = self.request_uri('', method='DELETE')
+        status = self._request_uri('', method='DELETE')
         return bool(status['success'])
     
     def post(self, **params):
@@ -2478,8 +2561,8 @@ class WebHook(Resource):
         """
         req_args = ['active', ]
         all_args = ['active', ]
-        params = Resource.sanitize_params(params, all_args)
-        status = self.request_uri('', method='POST', params=params)
+        params = Resource.sanitize_params(params, all_args, req_args)
+        status = self._request_uri('', method='POST', params=params)
         return bool(status['success'])
         
 
@@ -2497,7 +2580,13 @@ class OauthProvider(Resource):
         'resource_url'
     ]
     def __init__(self, parent, defn):
-        """Constructor."""
+        """Constructor.
+        
+        Required Arguments:
+            parent: ContextIO object - parent is an ContextIO object.
+            defn: a dictionary of parameters. The 'provider_consumer_key' 
+                parameter is required to make method calls.
+        """
         super(OauthProvider, self).__init__(
             parent, 
             'oauth_providers/{provider_consumer_key}', 
@@ -2515,7 +2604,7 @@ class OauthProvider(Resource):
         Returns:
             True if self is updated, else will throw a request error
         """
-        self.__init__(self.parent, self.request_uri(''))
+        self.__init__(self.parent, self._request_uri(''))
         return True
 
     def delete(self):
@@ -2529,5 +2618,5 @@ class OauthProvider(Resource):
         Returns:
             Bool
         """
-        status = self.request_uri('', method='DELETE')
+        status = self._request_uri('', method='DELETE')
         return bool(status['success'])
