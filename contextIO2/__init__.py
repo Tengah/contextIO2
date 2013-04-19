@@ -395,7 +395,7 @@ class ContextIO(object):
             self._request_uri('oauth_providers')
         ]
     
-    def post_oauth_providers(self, **params):
+    def post_oauth_provider(self, **params):
         """Add a new OAuth provider.
         
         Required Arguments:
@@ -614,7 +614,7 @@ class Account(Resource):
             'connect_tokens'
         )]
 
-    def post_connect_tokens(self, **params):
+    def post_connect_token(self, **params):
         """Obtain a new connect_token for a specific account.
         
         * Note: unused connect tokens are purged after 24 hours.
@@ -718,7 +718,7 @@ class Account(Resource):
             'email_addresses'
         )]
 
-    def post_email_addresses(self, **params):
+    def post_email_address(self, **params):
         """Add a new email address as an alias for an account.
         
         Documentation: http://context.io/docs/2.0/accounts/email_addresses#post
@@ -901,7 +901,7 @@ class Account(Resource):
             'messages', params=params
         )]
 
-    def post_messages(self, **params):
+    def post_message(self, **params):
         """Add a mesage in a given folder.
         
         Documentation: http://context.io/docs/2.0/accounts/messages#post
@@ -1168,7 +1168,7 @@ class Account(Resource):
         """
         return [WebHook(self, obj) for obj in self._request_uri('webhooks')]
     
-    def post_webhooks(self, **params):
+    def post_webhook(self, **params):
         """Create a new WebHook on an account.
         
         POST method for the webhooks resource.
@@ -1805,7 +1805,7 @@ class Message(Resource):
         return self.flags
         
     
-    def post_flags(self, **params):
+    def post_flag(self, **params):
         """Set message flags for a given email.
         
         Also, populates/updates self.flags with the new data.
@@ -1866,7 +1866,7 @@ class Message(Resource):
         self.folders = self._request_uri('folders')
         return self.folders
     
-    def post_folders(self, **params):
+    def post_folder(self, **params):
         """Edits the folders a message is in.
         
         This call supports adding and/or removing more than one folder 
