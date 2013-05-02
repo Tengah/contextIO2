@@ -36,7 +36,6 @@ message = Message(account, {'id': 'MESSAGE_ID'})
 """
 
 
-import json
 import logging
 import re
 
@@ -45,6 +44,11 @@ from urllib import urlencode, quote
 
 from util import as_bool, as_datetime, process_person_info, uncamelize
 
+# check to see if we can get json, or if we're on app engine
+try:
+    import json
+except:
+    from django.utils import simplejson as json
 
 class ArgumentError(Exception):
     """Class to handle bad arguments."""
@@ -1645,9 +1649,9 @@ class Message(Resource):
         if 'body' in defn:
             self.body = defn['body']
         if 'flags' in defn:
-            self.body = defn['flags']
+            self.flags = defn['flags']
         if 'headers' in defn:
-            self.body = defn['headers']
+            self.headers = defn['headers']
     
     def get(self, **params):
         """Get file, contact and other information about a given email message.
