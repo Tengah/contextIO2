@@ -168,6 +168,10 @@ class ContextIO(object):
     def _handle_request_error(self, response, body):
         """This method formats request errors and raises appropriate 
             exceptions."""
+            
+        if body.get('messages') is None:
+            raise httplib.HTTPException('HTTP %s: %s' % (response.get('status'), repr(response)))
+                  
         messages = []
         try:
             body = json.loads(body)
