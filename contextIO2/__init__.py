@@ -169,7 +169,7 @@ class ContextIO(object):
         """This method formats request errors and raises appropriate 
             exceptions."""
             
-        if body.get('messages') is None:
+        if response.get('messages') is None:
             raise httplib.HTTPException('HTTP %s: %s' % (response.get('status'), repr(response)))
                   
         messages = []
