@@ -41,6 +41,7 @@ import re
 
 from oauth2 import Request, Consumer, Client, SignatureMethod_HMAC_SHA1 as sha1
 from urllib import urlencode, quote
+import httplib
 
 from util import as_bool, as_datetime, process_person_info, uncamelize
 
@@ -173,12 +174,10 @@ class ContextIO(object):
             for message in body['messages']:
                 if message['type'] == 'error':
                     messages.append("error {0}".format(message['code']))
-            raise Exception(
-                'HTTP %s: %s' % (response['status'], ', '.join(messages))
-            )
+            raise Exception('HTTP %s: %s' % (response['status'], ', '.join(messages)))
 
         except (ValueError, KeyError):
-            raise Exception('HTTP %s: %s' % (response['status'], body))
+            raise httplib.HTTPException('HTTP %s: %s' % (response.get('status'), repr(response)))
 
     def get_accounts(self, **params):
         """List of Accounts.
