@@ -8,7 +8,7 @@ README = open(os.path.join(here, 'README.md')).read()
 requires=['oauth2']
 
 setup(name='ContextIO v2.0 Client Library',
-    version='1.0',
+    version='2.0.1',
     description='Library for accessing the Context.IO API v2.0 in Python',
     long_description=README,
     author='Tony Blank, Jesse Dhillon',
